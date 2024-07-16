@@ -1,0 +1,150 @@
+wandb_version: 1
+
+prefix:
+  desc: null
+  value: base
+device:
+  desc: null
+  value: cuda
+mode:
+  desc: null
+  value: train
+log_dir:
+  desc: null
+  value: logs/train
+eval_data_path:
+  desc: null
+  value: null
+use_wandb:
+  desc: null
+  value: true
+seed:
+  desc: null
+  value: 0
+agent:
+  desc: null
+  value:
+    agent_name: dp
+env:
+  desc: null
+  value:
+    env_class: ???
+    num_eef: 2
+    dof: 7
+    eef_dim: 13
+    vectorize: false
+    args:
+      num_eef: 2
+      dof: 7
+      seed: 0
+      obs_mode: pc
+      ac_mode: rel
+      max_episode_length: ???
+      num_points: 1024
+      randomize_rotation: false
+      randomize_scale: false
+      scale_low: 1.0
+      scale_high: 1.0
+      scale_aspect_limit: 100.0
+      uniform_scaling: false
+data:
+  desc: null
+  value:
+    dataset_class: base_dataset
+    dataset:
+      num_training_steps: ???
+      path: equibot/policies/datasets/data
+      num_points: 1024
+      num_augment: 0
+      same_aug_per_sample: true
+      aug_keep_original: true
+      aug_scale_low: 0.5
+      aug_scale_high: 1.5
+      aug_scale_aspect_limit: 1.0
+      aug_scale_rot: -1
+      aug_scale_pos: 0.1
+      aug_zero_z_offset: false
+      aug_center:
+      - 0.0
+      - 0.0
+      - 0.0
+      shuffle_pc: true
+      num_workers: 12
+      dof: 7
+      num_eef: 2
+      eef_dim: 13
+      obs_horizon: 2
+      pred_horizon: 16
+      reduce_horizon_dim: false
+      min_demo_length: 15
+model:
+  desc: null
+  value:
+    hidden_dim: 32
+    noise_scheduler:
+      _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
+      num_train_timesteps: 100
+      beta_schedule: squaredcos_cap_v2
+      clip_sample: true
+      prediction_type: epsilon
+    obs_horizon: 2
+    ac_horizon: 8
+    pred_horizon: 16
+    encoder:
+      c_dim: 32
+      backbone_type: vn_pointnet
+      backbone_args:
+        h_dim: 32
+        c_dim: 32
+        num_layers: 4
+        knn: 8
+    obs_mode: pc
+    ac_mode: rel
+    use_torch_compile: false
+    use_lstm: false
+training:
+  desc: null
+  value:
+    batch_size: 32
+    num_epochs: 2000
+    lr: 3.0e-05
+    weight_decay: 1.0e-06
+    num_eval_episodes: 10
+    eval_interval: 1000000
+    save_interval: 50
+    vis_interval: 100
+    ckpt: null
+eval:
+  desc: null
+  value:
+    last_ckpt: 1999
+    num_ckpts_to_eval: 5
+wandb:
+  desc: null
+  value:
+    entity: jsuh
+    project: equibot
+_wandb:
+  desc: null
+  value:
+    python_version: 3.8.19
+    cli_version: 0.17.4
+    framework: torch
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    start_time: 1721029258
+    t:
+      1:
+      - 1
+      - 50
+      - 55
+      3:
+      - 13
+      - 15
+      - 16
+      - 23
+      4: 3.8.19
+      5: 0.17.4
+      8:
+      - 5
+      13: linux-x86_64

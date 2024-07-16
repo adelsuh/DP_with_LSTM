@@ -1,0 +1,28 @@
+defaults:
+  - base
+
+agent:
+  agent_name: equibot
+
+model:
+  encoder:
+    backbone_type: vn_pointnet
+  noise_scheduler:
+    _target_: diffusers.schedulers.scheduling_ddim.DDIMScheduler
+    beta_start: 0.0001
+    beta_end: 0.02
+    set_alpha_to_one: True
+    steps_offset: 0
+    prediction_type: epsilon
+  num_diffusion_iters: 10
+
+training:
+  lr: 5.0e-5
+  betas: [0.95, 0.999]
+  eps: 1.0e-8
+  lr_scheduler: cosine
+  lr_warmup_steps: 500
+  num_epochs: 3000
+  gradient_accumulate_every: 1
+  max_grad_norm: 1.0
+  ema_decay: 0.95

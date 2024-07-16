@@ -1,0 +1,7 @@
+logs/
+**/__pycache__
+.DS_Store
+*.egg-info
+*.pth
+equibot/policies/datasets/data/*
+equibot/policies/datasets/data.zip

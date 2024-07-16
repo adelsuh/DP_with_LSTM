@@ -1,0 +1,5 @@
+defaults:
+  - lstm_none
+
+model:
+  use_lstm: true
