@@ -275,7 +275,8 @@ class DPAgent(object):
         gt_noise_norms = []
         pred_noise_norms = []
 
-        for ep_t in tqdm(range(self.cfg.model.obs_horizon-1, pc_all.shape[1]-self.cfg.model.pred_horizon)):
+        for ep_t in tqdm(range(self.cfg.model.obs_horizon-1, pc_all.shape[1]-self.cfg.model.pred_horizon),
+            leave=False):
             start_t = ep_t - (self.cfg.model.obs_horizon - 1)
             end_t = ep_t + self.cfg.model.pred_horizon
 
