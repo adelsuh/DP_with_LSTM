@@ -255,7 +255,7 @@ class ConditionalUnet1D(nn.Module):
         # encode local features
         h_local = list()
         if local_cond is not None:
-            local_cond = einops.rearrange(local_cond, "b h t -> b t h")
+            local_cond = einops.rearrange(local_cond, "t b h -> b h t")
             resnet, resnet2 = self.local_cond_encoder
             x = resnet(local_cond, global_feature)
             h_local.append(x)

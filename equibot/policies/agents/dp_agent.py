@@ -3,6 +3,8 @@ import torch
 from torch import nn
 import wandb
 
+from tqdm import tqdm
+
 from equibot.policies.utils.norm import Normalizer
 from equibot.policies.utils.misc import to_torch
 from equibot.policies.agents.dp_policy import DPPolicy
@@ -168,9 +170,6 @@ class DPAgent(object):
         # rgb = batch["rgb"]
         state = batch["eef_pos"]
         gt_action = batch["action"]
-        if self.cfg.model.use_lstm:
-            pc_past = torch.nn.utils.rnn.unpad_sequence(batch["pc_past"], batch["past_length"])
-            eef_past = torch.nn.utils.rnn.unpad_sequence(batch["eef_past"], batch["past_length"])
 
         if self.state_normalizer is None or self.ac_normalizer is None:
             self._init_normalizers(batch)
@@ -194,32 +193,8 @@ class DPAgent(object):
 
             z = z.reshape(batch_size, self.obs_horizon, -1)
             z = torch.cat([z, state], dim=-1)
-            
-            if self.cfg.model.use_lstm:
-                #TODO: Fix for variable size past
-                flattened_pc_past = pc_past.reshape(batch_size*pc_past.shape[1], *pc_past.shape[-2:])
-                if self.cfg.model.use_torch_compile:
-                    z_past = self.actor.encoder_handle(flattened_pc_past.permute(0, 2, 1))["global"]
-                else:
-                    z_past = self.actor.encoder(flattened_pc_past.permute(0, 2, 1))["global"]
-                z_past = z_past.reshape(batch_size, pc_past.shape[1], -1)
-                z_past = torch.cat([z_past, eef_past], dim=-1)
-                hiddens = []
-                if self.cfg.model.use_torch_compile:
-                    _, (h, c) = self.actor.lstm_handle(z_past.permute(1, 0, 2))
-                else:
-                    _, (h, c) = self.actor.lstm(z_past.permute(1, 0, 2))
-                for ob in z.permute(1, 0, 2): #ob: (batch_size, features)
-                    if self.cfg.model.use_torch_compile:
-                        _, (h, c) = self.actor.lstm_handle(ob.reshape(1, batch_size, -1), h, c)
-                    else:
-                        _, (h, c) = self.actor.lstm(ob.reshape(1, batch_size, -1), h, c)
-                    hiddens.append(h)
-                local_cond = torch.stack(hiddens) #(obs_horizon, batch_size, features)
-            else:
-                local_cond = None
 
-        obs_cond = z.reshape(batch_size, -1)  # (BS, obs_horizion * obs_dim)
+        obs_cond = z.reshape(batch_size, -1)  # (BS, obs_horizon * obs_dim)
 
         noise = torch.randn(gt_action.shape, device=self.device)
 
@@ -236,11 +211,11 @@ class DPAgent(object):
 
         if self.cfg.model.use_torch_compile:
             noise_pred = self.actor.noise_pred_net_handle(
-                noisy_actions, timesteps, global_cond=obs_cond, local_cond=local_cond
+                noisy_actions, timesteps, global_cond=obs_cond
             )
         else:
             noise_pred = self.actor.noise_pred_net(
-                noisy_actions, timesteps, global_cond=obs_cond, local_cond=local_cond
+                noisy_actions, timesteps, global_cond=obs_cond
             )
 
         loss = nn.functional.mse_loss(noise_pred, noise)
@@ -270,6 +245,133 @@ class DPAgent(object):
             ).mean(),
         }
         return metrics
+    
+    def update_lstm(self, batch, vis=False):
+        self.train()
+
+        batch = to_torch(batch, self.device)
+        batch["eef_pos"] = batch["eef_pos"].reshape(
+            tuple(batch["eef_pos"].shape[:2]) + (-1,)
+        )
+        pc_all = batch["pc"]
+        # rgb = batch["rgb"]
+        state_all = batch["eef_pos"]
+        gt_action_all = batch["action"]
+        length = batch["length"]
+
+        if self.state_normalizer is None or self.ac_normalizer is None:
+            self._init_normalizers(batch)
+        if self.obs_mode.startswith("pc"):
+            pc_all = self.pc_normalizer.normalize(pc_all)
+        state_all = self.state_normalizer.normalize(state_all)
+        gt_action_all = self.ac_normalizer.normalize(gt_action_all)
+
+        batch_size = pc_all.shape[0]
+
+        h = torch.zeros(1, batch_size, self.cfg.model.lstm_dim, device=self.cfg.device)
+        c = torch.zeros(1, batch_size, self.cfg.model.lstm_dim, device=self.cfg.device)
+
+        losses = []
+        gt_noise_norms = []
+        pred_noise_norms = []
+
+        for ep_t in tqdm(range(self.cfg.model.obs_horizon-1, pc_all.shape[1]-self.cfg.model.pred_horizon)):
+            start_t = ep_t - (self.cfg.model.obs_horizon - 1)
+            end_t = ep_t + self.cfg.model.pred_horizon
+
+            indices = torch.where(length > end_t)[0]
+            pc = pc_all[indices, start_t:ep_t+1]
+            state = state_all[indices, start_t:ep_t+1]
+            action = gt_action_all[indices, ep_t+1:end_t+1]
+
+            pc_shape = pc.shape
+
+            if self.obs_mode == "state":
+                z = state
+            else:
+                assert self.obs_mode != "rgb"
+                flattened_pc = pc.reshape(pc_shape[0] * pc_shape[1], *pc_shape[-2:])
+                if self.cfg.model.use_torch_compile:
+                    z = self.actor.encoder_handle(flattened_pc.permute(0, 2, 1))["global"]
+                else:
+                    z = self.actor.encoder(flattened_pc.permute(0, 2, 1))["global"]
+
+                z = z.reshape(pc_shape[0], pc_shape[1], -1)
+                z = torch.cat([z, state], dim=-1)
+                
+                pc_cur = pc[:, -1]
+                with torch.no_grad():
+                    if self.cfg.model.use_torch_compile:
+                        z_cur = self.actor.encoder_handle(pc_cur.permute(0, 2, 1))["global"]
+                    else:
+                        z_cur = self.actor.encoder(pc_cur.permute(0, 2, 1))["global"]
+
+                    z_cur = torch.cat([z_cur, state[:, -1]], dim=-1).reshape(1, pc_shape[0], -1)
+                    
+                if self.cfg.model.use_torch_compile:
+                    _, (h[:, indices], c[:, indices]) = self.actor.lstm_handle(z_cur, (h[:, indices], c[:, indices]))
+                else:
+                    _, (h[:, indices], c[:, indices]) = self.actor.lstm(z_cur, (h[:, indices], c[:, indices]))
+
+            obs_cond = z.reshape(pc_shape[0], -1)  # (BS, obs_dim * obs_horizon)
+            obs_cond = torch.cat([obs_cond, h[0, indices]], dim=1)
+
+            noise = torch.randn(action.shape, device=self.device)
+
+            timesteps = torch.randint(
+                0,
+                self.actor.noise_scheduler.config.num_train_timesteps,
+                (pc_shape[0],),
+                device=self.device,
+            ).long()
+
+            noisy_actions = self.actor.noise_scheduler.add_noise(
+                action, noise, timesteps
+            )
+
+            if self.cfg.model.use_torch_compile:
+                noise_pred = self.actor.noise_pred_net_handle(
+                    noisy_actions, timesteps, global_cond=obs_cond
+                )
+            else:
+                noise_pred = self.actor.noise_pred_net(
+                    noisy_actions, timesteps, global_cond=obs_cond
+                )
+
+            loss = nn.functional.mse_loss(noise_pred, noise)
+
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+            self.lr_scheduler.step()
+
+            # make sure gradients are complete
+            if self.obs_mode == "state":
+                grads = [k.grad for k in self.actor.noise_pred_net.parameters()]
+            else:
+                grads = self.actor.nets.parameters()
+            assert np.array([g is not None for g in grads]).all()
+
+            self.actor.step_ema()
+
+            h = h.detach()
+            c = c.detach()
+
+            losses.append(loss.item())
+            gt_noise_norms.append(np.linalg.norm(
+                noise.reshape(action.shape[0], -1).detach().cpu().numpy(), axis=1
+                ).mean())
+            pred_noise_norms.append(np.linalg.norm(
+                noise_pred.reshape(action.shape[0], -1).detach().cpu().numpy(), axis=1,
+                ).mean())
+
+        metrics = {
+            "loss": np.mean(losses),
+            "mean_gt_noise_norm": np.mean(gt_noise_norms),
+            "mean_pred_noise_norm": np.mean(pred_noise_norms),
+        }
+        return metrics
+
 
     def visualize_sample(
         self,

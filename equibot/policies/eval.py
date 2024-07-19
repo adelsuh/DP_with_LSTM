@@ -189,7 +189,9 @@ def run_eval(
     return metrics
 
 
-@hydra.main(config_path="configs", config_name="fold_synthetic")
+@hydra.main(version_base=None,
+    config_path="configs", config_name="fold_synthetic"
+)
 def main(cfg):
     assert cfg.mode == "eval"
     device = torch.device(cfg.device)

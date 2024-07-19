@@ -5,7 +5,7 @@ from torch import nn
 
 from equibot.policies.vision.pointnet_encoder import PointNetEncoder
 from equibot.policies.utils.diffusion.ema_model import EMAModel
-from equibot.policies.utils.diffusion.conditional_unet1d import ConditionalUnet1D
+from equibot.policies.utils.diffusion.simple_conditional_unet1d import ConditionalUnet1D
 from equibot.policies.utils.diffusion.resnet_with_gn import get_resnet, replace_bn_with_gn
 
 
@@ -50,10 +50,14 @@ class DPPolicy(nn.Module):
             self.encoder = replace_bn_with_gn(get_resnet("resnet18"))
         else:
             self.encoder = nn.Identity()
+        global_cond_dim = self.obs_dim*self.obs_horizon
+        if cfg.model.use_lstm:
+            global_cond_dim += cfg.model.lstm_dim
+            
         self.noise_pred_net = ConditionalUnet1D(
             input_dim=self.action_dim,
             diffusion_step_embed_dim=self.obs_dim * self.obs_horizon,
-            global_cond_dim=self.obs_dim * self.obs_horizon,
+            global_cond_dim=global_cond_dim,
         )
 
         self.nets = nn.ModuleDict(
@@ -61,7 +65,7 @@ class DPPolicy(nn.Module):
         )
 
         if self.cfg.model.use_lstm:
-            self.lstm = nn.LSTM(self.obs_dim, 4) #Theoretically 1 should be enough, but just in case...
+            self.lstm = nn.LSTM(self.obs_dim, cfg.model.lstm_dim) #Theoretically 1 should be enough, but just in case...
             self.nets.update({"lstm": self.lstm})
 
         self.ema = EMAModel(model=copy.deepcopy(self.nets), power=0.75)
@@ -117,8 +121,8 @@ class DPPolicy(nn.Module):
             if self.cfg.model.use_lstm:
                 memory = []
                 if hidden == None:
-                    h = torch.zeros(1, batch_size, 4)
-                    c = torch.zeros(1, batch_size, 4)
+                    h = torch.zeros(1, batch_size, cfg.model.lstm_dim)
+                    c = torch.zeros(1, batch_size, cfg.model.lstm_dim)
                 else:
                     h, c = hidden
                 for ob in z.permute(1, 0, 2): #ob: (batch_size, features)

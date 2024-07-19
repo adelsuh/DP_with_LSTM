@@ -3,3 +3,8 @@ defaults:
 
 model:
   use_lstm: true
+  lstm_dim: 4
+
+training:
+  save_interval: 50
+  batch_size: 20

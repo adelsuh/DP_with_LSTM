@@ -42,26 +42,44 @@ def main(cfg):
             settings=wandb.Settings(code_dir="."),
             config=wandb_config,
         )
-    log_dir = os.getcwd()
+    log_dir = os.path.join(os.getcwd(), cfg.prefix)
+    os.makedirs(log_dir, exist_ok=True)
 
     # init dataloader
     train_dataset = get_dataset(cfg, "train")
     num_workers = cfg.data.dataset.num_workers
     if cfg.model.use_lstm:
         def custom_collate(data):
-            pc = torch.tensor([d['pc'] for d in data])
-            eef_pos = torch.tensor([d['eef_pos'] for d in data])
-            action = torch.tensor([d['action'] for d in data])
-            past_length = torch.tensor([d['past_lenth'] for d in data])
+            # pc = torch.tensor(np.array([d['pc'] for d in data]))
+            # eef_pos = torch.tensor(np.array([d['eef_pos'] for d in data]))
+            # action = torch.tensor(np.array([d['action'] for d in data]))
+            # past_length = torch.tensor([d['past_length'] for d in data])
 
-            pc_past = [torch.tensor(d['pc_past']) for d in data]
-            eef_past = [torch.tensor(d['eef_past']) for d in data]
+            # pc_past = [torch.tensor(d['pc_past']) for d in data]
+            # eef_past = [torch.tensor(d['eef_past']) for d in data]
 
-            pc_past = torch.nn.utils.rnn.pad_sequence(pc_past, batch_first=True)
-            eef_past = torch.nn.utils.rnn.pad_sequence(eef_past, batch_first=True)
+            # for i in range(len(past_length)):
+            #     if past_length[i] == 0:
+            #         pc_past[i] = torch.zeros(1, cfg.data.dataset.num_points, 3)
+            #         eef_past[i] = torch.zeros(1, cfg.env.num_eef, cfg.env.eef_dim)
 
-            return dict(pc=pc, eef_pos=eef_pos, action=action, past_length=past_length,
-                        pc_past=pc_past, eef_past=eef_past)
+            # pc_past = torch.nn.utils.rnn.pad_sequence(pc_past, batch_first=True)
+            # eef_past = torch.nn.utils.rnn.pad_sequence(eef_past, batch_first=True)
+            
+            # return dict(pc=pc, eef_pos=eef_pos, action=action, past_length=past_length,
+            #             pc_past=pc_past, eef_past=eef_past)
+
+            pc = [torch.tensor(d['pc']) for d in data]
+            eef_pos = [torch.tensor(d['eef_pos']) for d in data]
+            action = [torch.tensor(d['action']) for d in data]
+            length = torch.tensor([len(pc_item) for pc_item in pc])
+
+            pc = torch.nn.utils.rnn.pad_sequence(pc, batch_first=True)
+            eef_pos = torch.nn.utils.rnn.pad_sequence(eef_pos, batch_first=True)
+            action = torch.nn.utils.rnn.pad_sequence(action, batch_first=True)
+            
+            return dict(pc=pc, eef_pos=eef_pos, action=action, length=length)
+                        
         train_loader = torch.utils.data.DataLoader(
             train_dataset,
             batch_size=batch_size,
@@ -116,9 +134,14 @@ def main(cfg):
     for epoch_ix in tqdm(range(start_epoch_ix, cfg.training.num_epochs)):
         batch_ix = 0
         for batch in tqdm(train_loader, leave=False, desc="Batches"):
-            train_metrics = agent.update(
-                batch, vis=epoch_ix % cfg.training.vis_interval == 0 and batch_ix == 0
-            )
+            if cfg.model.use_lstm:
+                train_metrics = agent.update_lstm(
+                    batch, vis=epoch_ix % cfg.training.vis_interval == 0 and batch_ix == 0
+                )
+            else:
+                train_metrics = agent.update(
+                    batch, vis=epoch_ix % cfg.training.vis_interval == 0 and batch_ix == 0
+                )
             if cfg.use_wandb:
                 wandb.log(
                     {"train/" + k: v for k, v in train_metrics.items()},
