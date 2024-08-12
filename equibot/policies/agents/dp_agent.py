@@ -70,24 +70,25 @@ class DPAgent(object):
 
     def act(self, obs, hidden=None, return_dict=False, debug=False):
         self.train(False)
-        assert isinstance(obs["pc"][0][0], np.ndarray)
-        if len(obs["state"].shape) == 3:
-            assert len(obs["pc"][0].shape) == 2  # (obs_horizon, N, 3)
-            obs["pc"] = [[x] for x in obs["pc"]]
+        # if not isinstance(obs["pc"], np.ndarray):
+        #     obs["pc"] = obs["pc"].cpu().numpy()
+        if len(obs["eef_pos"].shape) == 3:
+            assert len(obs["pc"][0].shape) == 3  # (obs_horizon, N, 3)
+            # obs["pc"] = [[x] for x in obs["pc"]]
             for k in obs:
                 if k != "pc" and isinstance(obs[k], np.ndarray):
                     obs[k] = obs[k][:, None]
-            has_batch_dim = False
-        elif len(obs["state"].shape) == 4:
-            assert len(obs["pc"][0][0].shape) == 2  # (obs_horizon, B, N, 3)
             has_batch_dim = True
+        # elif len(obs["eef_pos"].shape) == 4:
+        #     assert len(obs["pc"][0][0].shape) == 2  # (obs_horizon, B, N, 3)
+        #     has_batch_dim = True
         else:
             raise ValueError("Input format not recognized.")
 
         ac_dim = self.num_eef * self.dof
-        batch_size = len(obs["pc"][0])
+        batch_size = len(obs["pc"])
 
-        state = obs["state"].reshape(tuple(obs["state"].shape[:2]) + (-1,))
+        state = obs["eef_pos"].reshape(tuple(obs["eef_pos"].shape[:2]) + (-1,))
 
         # process the point clouds
         # some point clouds might be invalid
@@ -99,37 +100,41 @@ class DPAgent(object):
             for i in range(batch_size):
                 ac_dict.append(None)
         forward_idxs = list(np.arange(batch_size))
-        for pcs in obs["pc"]:
-            xyzs.append([])
-            for batch_idx, xyz in enumerate(pcs):
-                if not batch_idx in forward_idxs:
-                    xyzs[-1].append(np.zeros((self.num_points, 3)))
-                elif xyz.shape[0] == 0:
-                    # no points in point cloud, return no-op action
-                    forward_idxs.remove(batch_idx)
-                    xyzs[-1].append(np.zeros((self.num_points, 3)))
-                elif self.shuffle_pc:
-                    choice = np.random.choice(
-                        xyz.shape[0], self.num_points, replace=True
-                    )
-                    xyz = xyz[choice, :]
-                    xyzs[-1].append(xyz)
-                else:
-                    step = xyz.shape[0] // self.num_points
-                    xyz = xyz[::step, :][: self.num_points]
-                    xyzs[-1].append(xyz)
+        # for pcs in obs["pc"]:
+        #     xyzs.append([])
+        #     for batch_idx, xyz in enumerate(pcs):
+        #         if not batch_idx in forward_idxs:
+        #             xyzs[-1].append(np.zeros((self.num_points, 3)))
+        #         elif xyz.shape[0] == 0:
+        #             # no points in point cloud, return no-op action
+        #             forward_idxs.remove(batch_idx)
+        #             xyzs[-1].append(np.zeros((self.num_points, 3)))
+        #         elif self.shuffle_pc:
+        #             choice = np.random.choice(
+        #                 xyz.shape[0], self.num_points, replace=True
+        #             )
+        #             xyz = xyz[choice, :]
+        #             xyzs[-1].append(xyz)
+        #         else:
+        #             step = xyz.shape[0] // self.num_points
+        #             xyz = xyz[::step, :][: self.num_points]
+        #             xyzs[-1].append(xyz)
 
         if len(forward_idxs) > 0:
+            # torch_obs = dict(
+            #     pc=torch.tensor(np.array(xyzs).swapaxes(0, 1)[forward_idxs])
+            #     .to(self.device)
+            #     .float(),
+            #     state=torch.tensor(state.swapaxes(0, 1)[forward_idxs])
+            #     .to(self.device)
+            #     .float(),
+            # )
             torch_obs = dict(
-                pc=torch.tensor(np.array(xyzs).swapaxes(0, 1)[forward_idxs])
-                .to(self.device)
-                .float(),
-                state=torch.tensor(state.swapaxes(0, 1)[forward_idxs])
-                .to(self.device)
-                .float(),
+                pc = obs["pc"].to(self.device).float(),
+                state = state.to(self.device).float()
             )
             for k in obs:
-                if not k in ["pc", "state"] and isinstance(obs[k], np.ndarray):
+                if not k in ["pc", "eef_pos"] and isinstance(obs[k], np.ndarray):
                     torch_obs[k] = (
                         torch.tensor(obs[k].swapaxes(0, 1)[forward_idxs])
                         .to(self.device)
@@ -150,6 +155,7 @@ class DPAgent(object):
                 .numpy()
             )
             ac[idx] = unnormed_action
+        
         if not has_batch_dim:
             ac = ac[0]
             if return_dict:

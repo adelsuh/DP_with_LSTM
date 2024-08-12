@@ -79,6 +79,7 @@ model:
   ac_mode: ${env.args.ac_mode}
   use_torch_compile: false
   use_lstm: false
+  use_obj_pc: false
 
 training:
   batch_size: 32

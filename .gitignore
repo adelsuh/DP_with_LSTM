@@ -5,3 +5,4 @@ logs/
 *.pth
 equibot/policies/datasets/data/*
 equibot/policies/datasets/data.zip
+wandb/*

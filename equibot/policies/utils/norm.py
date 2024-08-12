@@ -51,3 +51,7 @@ class Normalizer(object):
 
     def load_state_dict(self, state_dict):
         self.stats = state_dict
+    
+    def to(self, device):
+        for k in self.stats:
+            self.stats[k] = self.stats[k].to(device)

@@ -118,21 +118,18 @@ class DPPolicy(nn.Module):
                 z = ema_nets["encoder"](flattened_pc.permute(0, 2, 1))["global"]
             z = z.reshape(batch_size, self.obs_horizon, -1)
             z = torch.cat([z, state], dim=-1)
+            obs_cond = z.reshape(batch_size, -1)  # (BS, obs_horizon * obs_dim)
             if self.cfg.model.use_lstm:
-                memory = []
                 if hidden == None:
-                    h = torch.zeros(1, batch_size, cfg.model.lstm_dim)
-                    c = torch.zeros(1, batch_size, cfg.model.lstm_dim)
+                    h = torch.zeros(1, batch_size, self.cfg.model.lstm_dim).to(self.cfg.device)
+                    c = torch.zeros(1, batch_size, self.cfg.model.lstm_dim).to(self.cfg.device)
                 else:
                     h, c = hidden
-                for ob in z.permute(1, 0, 2): #ob: (batch_size, features)
-                    _, (h, c) = ema_nets["lstm"](ob.reshape(1, batch_size, -1), h, c)
-                    memory.append(c)
-                local_cond = torch.stack(memory) #(obs_horizon, batch_size, features)
+
+                _, (h, c) = ema_nets["lstm"](z.permute(1, 0, 2), (h, c))
                 ret.update({"h": h, "c": c})
-            else:
-                local_cond = None
-        obs_cond = z.reshape(batch_size, -1)  # (BS, obs_horizon * obs_dim)
+                obs_cond = torch.cat([obs_cond, h[0]], dim=1)
+        
 
         initial_noise_scale = 0.0 if debug else 1.0
         noisy_action = (
@@ -147,7 +144,7 @@ class DPPolicy(nn.Module):
         for k in self.noise_scheduler.timesteps:
             # predict noise
             noise_pred = ema_nets["noise_pred_net"](
-                sample=curr_action, timestep=k, global_cond=obs_cond, local_cond=local_cond
+                sample=curr_action, timestep=k, global_cond=obs_cond,
             )
 
             # inverse diffusion step

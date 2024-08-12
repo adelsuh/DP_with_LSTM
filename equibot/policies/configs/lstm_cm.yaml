@@ -1,5 +1,5 @@
 defaults:
-  - lstm_none
+  - lstm
 
 prefix: null
 
@@ -30,7 +30,7 @@ training:
   max_grad_norm: 1.0
   ema_decay: 0.95
   sample_every: 5
-  checkpoint_every: 200
+  checkpoint_every: 50
 
 checkpoint:
   path: null

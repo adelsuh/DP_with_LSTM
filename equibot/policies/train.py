@@ -50,25 +50,6 @@ def main(cfg):
     num_workers = cfg.data.dataset.num_workers
     if cfg.model.use_lstm:
         def custom_collate(data):
-            # pc = torch.tensor(np.array([d['pc'] for d in data]))
-            # eef_pos = torch.tensor(np.array([d['eef_pos'] for d in data]))
-            # action = torch.tensor(np.array([d['action'] for d in data]))
-            # past_length = torch.tensor([d['past_length'] for d in data])
-
-            # pc_past = [torch.tensor(d['pc_past']) for d in data]
-            # eef_past = [torch.tensor(d['eef_past']) for d in data]
-
-            # for i in range(len(past_length)):
-            #     if past_length[i] == 0:
-            #         pc_past[i] = torch.zeros(1, cfg.data.dataset.num_points, 3)
-            #         eef_past[i] = torch.zeros(1, cfg.env.num_eef, cfg.env.eef_dim)
-
-            # pc_past = torch.nn.utils.rnn.pad_sequence(pc_past, batch_first=True)
-            # eef_past = torch.nn.utils.rnn.pad_sequence(eef_past, batch_first=True)
-            
-            # return dict(pc=pc, eef_pos=eef_pos, action=action, past_length=past_length,
-            #             pc_past=pc_past, eef_past=eef_past)
-
             pc = [torch.tensor(d['pc']) for d in data]
             eef_pos = [torch.tensor(d['eef_pos']) for d in data]
             action = [torch.tensor(d['action']) for d in data]
