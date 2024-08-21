@@ -162,6 +162,8 @@ class DPAgent(object):
                 ac_dict = ac_dict[0]
         if return_dict:
             return ac, ac_dict
+        elif hidden is not None:
+            return ac, raw_ac_dict["h"], raw_ac_dict["c"]
         else:
             return ac
 
