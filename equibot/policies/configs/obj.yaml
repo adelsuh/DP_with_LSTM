@@ -1,0 +1,6 @@
+defaults:
+  - lstm_none
+
+model:
+  use_obj_pc: true
+  obj_path: ./pcd_obj.ply

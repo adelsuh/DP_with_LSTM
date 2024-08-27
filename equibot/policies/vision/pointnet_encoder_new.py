@@ -43,7 +43,7 @@ class PointNetEncoder(nn.Module):
             self.obj_layers.append(nn.Conv1d(h_dim * 2, h_dim, kernel_size=1))
         self.conv_out = nn.Conv1d(h_dim * self.num_layers, c_dim, kernel_size=1)
 
-    def forward(self, x, obj_pc, mode=0, ret_perpoint_feat=False):
+    def forward(self, x, obj_pc, ret_perpoint_feat=False):
         #Object PC should have the same # of points as the raw point cloud
         #if not, repeat so that it is
         # ex. if x is (32, 3, 1024) and obj_pc is (32, 3, 512),
@@ -52,7 +52,7 @@ class PointNetEncoder(nn.Module):
         y = self.act(self.conv_in(x))
         obj = self.act(self.obj_in(obj_pc))
 
-        obj = obj.repeat(1, 1, x.shape[-1]/obj.shape[-1])
+        obj = obj.repeat(x.shape[0], 1, int(x.shape[-1]/obj.shape[-1]))
 
         feat_list = []
         for i in range(self.num_layers):

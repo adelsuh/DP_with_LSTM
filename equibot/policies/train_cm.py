@@ -321,7 +321,7 @@ class TrainWorkspace:
                 eef_pos = torch.nn.utils.rnn.pad_sequence(eef_pos, batch_first=True)
                 action = torch.nn.utils.rnn.pad_sequence(action, batch_first=True)
                 
-                return dict(pc=pc, eef_pos=eef_pos, action=action, length=length)
+                return dict(pc=pc, rgb=rgb, eef_pos=eef_pos, action=action, length=length)
                             
             train_dataloader = torch.utils.data.DataLoader(
                 self.dataset,

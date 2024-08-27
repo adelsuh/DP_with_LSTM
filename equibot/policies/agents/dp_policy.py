@@ -2,8 +2,10 @@ import copy
 import hydra
 import torch
 from torch import nn
+import open3d as o3d
+import pytorch3d.ops as torch3d_ops
+import numpy as np
 
-from equibot.policies.vision.pointnet_encoder import PointNetEncoder
 from equibot.policies.utils.diffusion.ema_model import EMAModel
 from equibot.policies.utils.diffusion.simple_conditional_unet1d import ConditionalUnet1D
 from equibot.policies.utils.diffusion.resnet_with_gn import get_resnet, replace_bn_with_gn
@@ -16,6 +18,12 @@ class DPPolicy(nn.Module):
         self.hidden_dim = hidden_dim = cfg.model.hidden_dim
         self.obs_mode = cfg.model.obs_mode
         self.device = device
+        if cfg.model.use_obj_pc:
+            from equibot.policies.vision.pointnet_encoder_new import PointNetEncoder
+            self.obj_pc = np.asarray(o3d.io.read_point_cloud(cfg.model.obj_path).points)
+            self.obj_pc = torch.from_numpy(self.downsample_with_fps(self.obj_pc, 256)).to(cfg.device, dtype=torch.float32)
+        else:
+            from equibot.policies.vision.pointnet_encoder import PointNetEncoder
 
         # |o|o|                             observations: 2
         # | |a|a|a|a|a|a|a|a|               actions executed: 8
@@ -38,6 +46,8 @@ class DPPolicy(nn.Module):
             self.obs_dim = 512 + self.num_eef * self.eef_dim
         else:
             self.obs_dim = hidden_dim + self.num_eef * self.eef_dim
+        if cfg.model.obs_rgb:
+            self.obs_dim += 512
         self.action_dim = self.dof * cfg.env.num_eef
 
         if self.obs_mode.startswith("pc"):
@@ -50,6 +60,8 @@ class DPPolicy(nn.Module):
             self.encoder = replace_bn_with_gn(get_resnet("resnet18"))
         else:
             self.encoder = nn.Identity()
+        if cfg.model.obs_rgb:
+            self.rgb_encoder = replace_bn_with_gn(get_resnet("resnet18"))
         global_cond_dim = self.obs_dim*self.obs_horizon
         if cfg.model.use_lstm:
             global_cond_dim += cfg.model.lstm_dim
@@ -63,6 +75,9 @@ class DPPolicy(nn.Module):
         self.nets = nn.ModuleDict(
             {"encoder": self.encoder, "noise_pred_net": self.noise_pred_net}
         )
+
+        if cfg.model.obs_rgb:
+            self.nets.update({"rgb_encoder": self.rgb_encoder})
 
         if self.cfg.model.use_lstm:
             self.lstm = nn.LSTM(self.obs_dim, cfg.model.lstm_dim) #Theoretically 1 should be enough, but just in case...
@@ -81,8 +96,19 @@ class DPPolicy(nn.Module):
         if self.cfg.model.use_torch_compile:
             self.encoder_handle = torch.compile(self.encoder)
             self.noise_pred_net_handle = torch.compile(self.noise_pred_net)
+            if self.cfg.model.obs_rgb:
+                self.rgb_encoder_handle = torch.compile(self.rgb_encoder)
             if self.cfg.model.use_lstm:
                 self.lstm_handle = torch.compile(self.lstm)
+    
+    def downsample_with_fps(self, points: np.ndarray, n_points):
+        # fast point cloud sampling using torch3d
+        points = torch.from_numpy(points).unsqueeze(0).cuda()
+        # remember to only use coord to sample
+        _, sampled_indices = torch3d_ops.sample_farthest_points(points=points[...,:3], K=n_points)
+        points = points.squeeze(0).cpu().numpy()
+        points = points[sampled_indices.squeeze(0).cpu().numpy()]
+        return points
 
     def forward(self, obs, hidden=None, predict_action=True, debug=False):
         # assumes that observation has format:
@@ -106,17 +132,23 @@ class DPPolicy(nn.Module):
         if self.obs_mode == "state":
             z = state
         else:
-            if self.obs_mode == "rgb":
+            if self.obs_mode.startswith("pc"):
+                flattened_pc = pc.reshape(batch_size * self.obs_horizon, *pc_shape[-2:])
+                if self.cfg.model.use_obj_pc:
+                    z = ema_nets["encoder"](flattened_pc.permute(0, 2, 1), self.obj_pc)["global"]
+                else:
+                    z = ema_nets["encoder"](flattened_pc.permute(0, 2, 1))["global"]
+                z = z.reshape(batch_size, self.obs_horizon, -1)
+            if self.cfg.model.obs_rgb :
                 rgb = obs["rgb"]
                 rgb_shape = rgb.shape
                 flattened_rgb = rgb.reshape(
                     batch_size * self.obs_horizon, *rgb_shape[-3:]
                 )
-                z = ema_nets["encoder"](flattened_rgb.permute(0, 3, 1, 2))
-            else:
-                flattened_pc = pc.reshape(batch_size * self.obs_horizon, *pc_shape[-2:])
-                z = ema_nets["encoder"](flattened_pc.permute(0, 2, 1))["global"]
-            z = z.reshape(batch_size, self.obs_horizon, -1)
+                z_rgb = ema_nets["rgb_encoder"](flattened_rgb.permute(0, 3, 1, 2))
+                z_rgb = z_rgb.reshape(batch_size, self.obs_horizon, -1)
+                z = torch.cat([z, z_rgb], dim=-1)
+
             z = torch.cat([z, state], dim=-1)
             obs_cond = z.reshape(batch_size, -1)  # (BS, obs_horizon * obs_dim)
             if self.cfg.model.use_lstm:

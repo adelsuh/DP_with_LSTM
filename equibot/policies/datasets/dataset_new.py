@@ -20,7 +20,7 @@ class LSTMDataset(BaseDataset):
     def __getitem__(self, idx): #Get full trajectory
         ep = self.ep_list[idx]
         ep_t_list = np.arange(0, self.ep_length_dict[ep] - 1)
-        ret = dict(pc=[], rgb=[], eef_pos=[], eef_rot=[], action=[], offset=[])
+        ret = dict(pc=[], eef_pos=[], eef_rot=[], action=[], offset=[])
         if self.num_augment > 0:
             if self.same_aug_per_sample:
                 aug_idx = np.random.randint(self.num_augment)

@@ -77,6 +77,7 @@ model:
       knn: 8
   obs_mode: ${env.args.obs_mode}
   ac_mode: ${env.args.ac_mode}
+  obs_rgb: false
   use_torch_compile: false
   use_lstm: false
   use_obj_pc: false

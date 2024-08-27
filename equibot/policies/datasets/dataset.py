@@ -106,7 +106,7 @@ class BaseDataset(Dataset):
         end_t = ep_t + self.pred_horizon
         ep_t_list = np.arange(start_t, end_t)
         clipped_ep_t_list = np.clip(ep_t_list, 0, self.ep_length_dict[key_fn(fn)] - 1)
-        ret = dict(pc=[], rgb=[], eef_pos=[], eef_rot=[], action=[], offset=[])
+        ret = dict(pc=[], eef_pos=[], eef_rot=[], action=[], offset=[])
         if self.num_augment > 0:
             if self.same_aug_per_sample:
                 aug_idx = np.random.randint(self.num_augment)
@@ -146,7 +146,7 @@ class BaseDataset(Dataset):
                     )
 
                 data_t = self._process_data_from_file(
-                    fn_state_t, ["pc", "rgb", "eef_pos"], aug_idx=aug_idx
+                    fn_state_t, ["pc", "eef_pos"], aug_idx=aug_idx
                 )
             else:
                 keys = ["action", "eef_pos", "pc"]

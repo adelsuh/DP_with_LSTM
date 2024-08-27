@@ -41,13 +41,13 @@ def start_camera():
     return k4a
 
 def downsample_with_fps(points: np.ndarray):
-        # fast point cloud sampling using torch3d
-        points = torch.from_numpy(points).unsqueeze(0).cuda()
-        # remember to only use coord to sample
-        _, sampled_indices = torch3d_ops.sample_farthest_points(points=points[...,:3], K=1024)
-        points = points.squeeze(0).cpu().numpy()
-        points = points[sampled_indices.squeeze(0).cpu().numpy()]
-        return points
+    # fast point cloud sampling using torch3d
+    points = torch.from_numpy(points).unsqueeze(0).cuda()
+    # remember to only use coord to sample
+    _, sampled_indices = torch3d_ops.sample_farthest_points(points=points[...,:3], K=1024)
+    points = points.squeeze(0).cpu().numpy()
+    points = points[sampled_indices.squeeze(0).cpu().numpy()]
+    return points
 
 def distance_from_plane(points):
     #define the plane equation (determined from plane segementation algorithm)
