@@ -2,5 +2,5 @@ defaults:
   - lstm_none
 
 model:
-  use_obj_pc_encoder: true
+  use_obj_pc_condition: true
   obj_path: ./pcd_obj.ply

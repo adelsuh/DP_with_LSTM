@@ -195,12 +195,12 @@ class DPAgent(object):
         else:
             flattened_pc = pc.reshape(batch_size * self.obs_horizon, *pc_shape[-2:])
             if self.cfg.model.use_torch_compile:
-                if self.cfg.model.use_obj_pc:
+                if self.cfg.model.use_obj_pc_encoder:
                     z = self.actor.encoder_handle(flattened_pc.permute(0, 2, 1), self.actor.obj_pc.permute(1,0))["global"]
                 else:
                     z = self.actor.encoder_handle(flattened_pc.permute(0, 2, 1))["global"]
             else:
-                if self.cfg.model.use_obj_pc:
+                if self.cfg.model.use_obj_pc_encoder:
                     z = self.actor.encoder(flattened_pc.permute(0, 2, 1), self.actor.obj_pc.permute(1,0))["global"]
                 else:
                     z = self.actor.encoder(flattened_pc.permute(0, 2, 1))["global"]
@@ -210,10 +210,14 @@ class DPAgent(object):
                 flattened_rgb = rgb.reshape(
                     batch_size * self.obs_horizon, *rgb_shape[-3:]
                 )
-                z_rgb = ema_nets["rgb_encoder"](flattened_rgb.permute(0, 3, 1, 2))
+                z_rgb = self.actor.rgb_encoder(flattened_rgb.permute(0, 3, 1, 2))
                 z_rgb = z_rgb.reshape(batch_size, self.obs_horizon, -1)
                 z = torch.cat([z, z_rgb], dim=-1)
-            z = torch.cat([z, state], dim=-1)
+            z = torch.cat([z, state], dim=-1).reshape(batch_size, -1)
+            if self.cfg.model.use_obj_pc_condition:
+                z_obj = self.actor.encoder(self.actor.obj_pc.permute(1, 0))["global"]
+                z_obj = z_obj.repeat(batch_size, 1)
+                z = torch.cat([z, z_obj], dim=-1)
 
         obs_cond = z.reshape(batch_size, -1)  # (BS, obs_horizon * obs_dim)
 
@@ -256,7 +260,7 @@ class DPAgent(object):
         self.actor.step_ema()
 
         metrics = {
-            "loss": loss,
+            "loss": loss.item(),
             "mean_gt_noise_norm": np.linalg.norm(
                 noise.reshape(gt_action.shape[0], -1).detach().cpu().numpy(), axis=1
             ).mean(),
@@ -315,12 +319,12 @@ class DPAgent(object):
             else:
                 flattened_pc = pc.reshape(pc_shape[0] * pc_shape[1], *pc_shape[-2:])
                 if self.cfg.model.use_torch_compile:
-                    if self.cfg.model.use_obj_pc:
+                    if self.cfg.model.use_obj_pc_encoder:
                         z = self.actor.encoder_handle(flattened_pc.permute(0, 2, 1), self.actor.obj_pc)["global"]
                     else:
                         z = self.actor.encoder_handle(flattened_pc.permute(0, 2, 1))["global"]
                 else:
-                    if self.cfg.model.use_obj_pc:
+                    if self.cfg.model.use_obj_pc_encoder:
                         z = self.actor.encoder(flattened_pc.permute(0, 2, 1), self.actor.obj_pc)["global"]
                     else:
                         z = self.actor.encoder(flattened_pc.permute(0, 2, 1))["global"]
@@ -330,26 +334,30 @@ class DPAgent(object):
                     flattened_rgb = rgb.reshape(
                         batch_size * self.obs_horizon, *rgb_shape[-3:]
                     )
-                    z_rgb = ema_nets["rgb_encoder"](flattened_rgb.permute(0, 3, 1, 2))
+                    z_rgb = self.actor.rgb_encoder(flattened_rgb.permute(0, 3, 1, 2))
                     z_rgb = z_rgb.reshape(batch_size, self.obs_horizon, -1)
                     z = torch.cat([z, z_rgb], dim=-1)
-                z = torch.cat([z, state], dim=-1)
+
+                z = torch.cat([z, state], dim=-1).reshape(pc_shape[0], -1)
+                if self.cfg.model.use_obj_pc_condition:
+                    z_obj = self.actor.encoder(self.actor.obj_pc.permute(1, 0))["global"]
+                    z_obj = z_obj.repeat(batch_size, 1)
+                    z = torch.cat([z, z_obj], dim=-1)
                 
                 pc_cur = pc[:, -1]
-                with torch.no_grad():
-                    if self.cfg.model.use_torch_compile:
-                        if self.cfg.model.use_obj_pc:
-                            z_cur = self.actor.encoder_handle(pc_cur.permute(0, 2, 1), self.actor.obj_pc)["global"]
-                        else:
-                            z_cur = self.actor.encoder_handle(pc_cur.permute(0, 2, 1))["global"]
+                if self.cfg.model.use_torch_compile:
+                    if self.cfg.model.use_obj_pc_encoder:
+                        z_cur = self.actor.encoder_handle(pc_cur.permute(0, 2, 1), self.actor.obj_pc)["global"]
                     else:
-                        if self.cfg.model.use_obj_pc:
-                            z_cur = self.actor.encoder(pc_cur.permute(0, 2, 1), self.actor.obj_pc)["global"]
-                        else:
-                            z_cur = self.actor.encoder(pc_cur.permute(0, 2, 1))["global"]
+                        z_cur = self.actor.encoder_handle(pc_cur.permute(0, 2, 1))["global"]
+                else:
+                    if self.cfg.model.use_obj_pc_encoder:
+                        z_cur = self.actor.encoder(pc_cur.permute(0, 2, 1), self.actor.obj_pc)["global"]
+                    else:
+                        z_cur = self.actor.encoder(pc_cur.permute(0, 2, 1))["global"]
 
-                    z_cur = torch.cat([z_cur, state[:, -1]], dim=-1).reshape(1, pc_shape[0], -1)
-                    
+                z_cur = torch.cat([z_cur, state[:, -1]], dim=-1).reshape(1, pc_shape[0], -1)
+                
                 if self.cfg.model.use_torch_compile:
                     _, (h[:, indices], c[:, indices]) = self.actor.lstm_handle(z_cur, (h[:, indices], c[:, indices]))
                 else:

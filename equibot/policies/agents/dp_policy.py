@@ -18,8 +18,12 @@ class DPPolicy(nn.Module):
         self.hidden_dim = hidden_dim = cfg.model.hidden_dim
         self.obs_mode = cfg.model.obs_mode
         self.device = device
-        if cfg.model.use_obj_pc:
+        if cfg.model.use_obj_pc_encoder:
             from equibot.policies.vision.pointnet_encoder_new import PointNetEncoder
+            self.obj_pc = np.asarray(o3d.io.read_point_cloud(cfg.model.obj_path).points)
+            self.obj_pc = torch.from_numpy(self.downsample_with_fps(self.obj_pc, 256)).to(cfg.device, dtype=torch.float32)
+        elif cfg.model.use_obj_pc_condition:
+            from equibot.policies.vision.pointnet_encoder import PointNetEncoder
             self.obj_pc = np.asarray(o3d.io.read_point_cloud(cfg.model.obj_path).points)
             self.obj_pc = torch.from_numpy(self.downsample_with_fps(self.obj_pc, 256)).to(cfg.device, dtype=torch.float32)
         else:
@@ -65,6 +69,8 @@ class DPPolicy(nn.Module):
         global_cond_dim = self.obs_dim*self.obs_horizon
         if cfg.model.use_lstm:
             global_cond_dim += cfg.model.lstm_dim
+        if cfg.model.use_obj_pc_condition:
+            global_cond_dim += hidden_dim
             
         self.noise_pred_net = ConditionalUnet1D(
             input_dim=self.action_dim,
@@ -134,8 +140,8 @@ class DPPolicy(nn.Module):
         else:
             if self.obs_mode.startswith("pc"):
                 flattened_pc = pc.reshape(batch_size * self.obs_horizon, *pc_shape[-2:])
-                if self.cfg.model.use_obj_pc:
-                    z = ema_nets["encoder"](flattened_pc.permute(0, 2, 1), self.obj_pc)["global"]
+                if self.cfg.model.use_obj_pc_encoder:
+                    z = ema_nets["encoder"](flattened_pc.permute(0, 2, 1), self.obj_pc.permute(1, 2))["global"]
                 else:
                     z = ema_nets["encoder"](flattened_pc.permute(0, 2, 1))["global"]
                 z = z.reshape(batch_size, self.obs_horizon, -1)
@@ -150,6 +156,8 @@ class DPPolicy(nn.Module):
                 z = torch.cat([z, z_rgb], dim=-1)
 
             z = torch.cat([z, state], dim=-1)
+            if self.cfg.model.use_obj_pc_condition:
+                z = torch.cat([z, ema_nets["encoder"](self.obj_pc.permute(1, 2))["global"]], dim=-1)
             obs_cond = z.reshape(batch_size, -1)  # (BS, obs_horizon * obs_dim)
             if self.cfg.model.use_lstm:
                 if hidden == None:

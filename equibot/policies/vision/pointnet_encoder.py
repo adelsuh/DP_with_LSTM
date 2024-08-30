@@ -40,10 +40,10 @@ class PointNetEncoder(nn.Module):
         for i in range(self.num_layers):
             y = self.act(self.layers[i](y))
             y_global = y.max(-1, keepdim=True).values
-            y = torch.cat([y, y_global.expand_as(y)], dim=1)
+            y = torch.cat([y, y_global.expand_as(y)], dim=-2)
             y = self.act(self.global_layers[i](y))
             feat_list.append(y)
-        x = torch.cat(feat_list, dim=1)
+        x = torch.cat(feat_list, dim=-2)
         x = self.conv_out(x)
 
         x_global = x.max(-1).values

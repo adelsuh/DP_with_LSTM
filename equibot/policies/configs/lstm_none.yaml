@@ -80,7 +80,8 @@ model:
   obs_rgb: false
   use_torch_compile: false
   use_lstm: false
-  use_obj_pc: false
+  use_obj_pc_encoder: false
+  use_obj_pc_condition: false
 
 training:
   batch_size: 32

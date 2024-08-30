@@ -10,6 +10,7 @@ import getpass as gt
 from tqdm import tqdm
 from glob import glob
 from omegaconf import OmegaConf
+import matplotlib.pyplot as plt
 
 from equibot.policies.utils.media import save_video
 from equibot.policies.utils.misc import get_env_class, get_dataset, get_agent
@@ -111,6 +112,7 @@ def main(cfg):
         start_epoch_ix = 0
 
     # train loop
+    losses = []
     global_step = 0
     for epoch_ix in tqdm(range(start_epoch_ix, cfg.training.num_epochs)):
         batch_ix = 0
@@ -129,6 +131,8 @@ def main(cfg):
                     step=global_step,
                 )
                 wandb.log({"epoch": epoch_ix}, step=global_step)
+            if batch_ix == 0:
+                losses.append(train_metrics["loss"])
             del train_metrics
             global_step += 1
             batch_ix += 1
@@ -182,6 +186,13 @@ def main(cfg):
                 ]:
                     os.remove(fn)
             agent.save_snapshot(save_path)
+    
+    with open(os.path.join(log_dir, 'losses.npy'), 'wb') as f:
+        np.save(f, np.array(losses))
+    plt.plot(losses[500:])
+    plt.savefig(os.path.join(log_dir, 'plot.png'))
+    
+
 
 
 if __name__ == "__main__":
