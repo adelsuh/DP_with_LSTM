@@ -297,6 +297,7 @@ class DPAgent(object):
         c = torch.zeros(1, batch_size, self.cfg.model.lstm_dim, device=self.cfg.device)
 
         losses = []
+        losses_update = []
         gt_noise_norms = []
         pred_noise_norms = []
 
@@ -389,11 +390,15 @@ class DPAgent(object):
                 )
 
             loss = nn.functional.mse_loss(noise_pred, noise)
+            losses.append(loss.item())
+            losses_update.append(loss)
 
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
-            self.lr_scheduler.step()
+            if len(losses_update) == 5:
+                self.optimizer.zero_grad()
+                torch.sum(torch.stack(losses_update)).backward()
+                self.optimizer.step()
+                self.lr_scheduler.step()
+                losses_update = []
 
             # make sure gradients are complete
             if self.obs_mode == "state":
@@ -407,7 +412,6 @@ class DPAgent(object):
             h = h.detach()
             c = c.detach()
 
-            losses.append(loss.item())
             gt_noise_norms.append(np.linalg.norm(
                 noise.reshape(action.shape[0], -1).detach().cpu().numpy(), axis=1
                 ).mean())

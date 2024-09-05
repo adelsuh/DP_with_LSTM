@@ -13,7 +13,7 @@ env:
   env_class: ???
   num_eef: 1
   dof: 7
-  eef_dim: 7
+  eef_dim: 8
   vectorize: false
   args:
     num_eef: ${env.num_eef}
@@ -84,7 +84,7 @@ model:
   use_obj_pc_condition: false
 
 training:
-  batch_size: 32
+  batch_size: 128
   num_epochs: 2000
   lr: 3e-5
   weight_decay: 1e-6

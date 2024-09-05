@@ -8,3 +8,4 @@ model:
 training:
   save_interval: 50
   batch_size: 20
+  loss_every: 5

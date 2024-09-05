@@ -178,7 +178,7 @@ def main(cfg):
             or epoch_ix == cfg.training.num_epochs - 1
         ):
             save_path = os.path.join(log_dir, f"ckpt{epoch_ix:05d}.pth")
-            num_ckpt_to_keep = 10
+            num_ckpt_to_keep = 20
             if len(list(glob(os.path.join(log_dir, "ckpt*.pth")))) > num_ckpt_to_keep:
                 # remove old checkpoints
                 for fn in list(sorted(glob(os.path.join(log_dir, "ckpt*.pth"))))[
