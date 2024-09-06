@@ -393,7 +393,7 @@ class DPAgent(object):
             losses.append(loss.item())
             losses_update.append(loss)
 
-            if len(losses_update) == 5:
+            if len(losses_update) == self.cfg.training.loss_every:
                 self.optimizer.zero_grad()
                 torch.sum(torch.stack(losses_update)).backward()
                 self.optimizer.step()
