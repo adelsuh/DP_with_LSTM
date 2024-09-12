@@ -47,7 +47,7 @@ data:
     aug_zero_z_offset: false
     aug_center: [0., 0., 0.]
     shuffle_pc: true
-    num_workers: 12
+    num_workers: 8
     dof: ${env.dof}
     num_eef: ${env.num_eef}
     eef_dim: ${env.eef_dim}
@@ -79,7 +79,8 @@ model:
   ac_mode: ${env.args.ac_mode}
   use_torch_compile: false
   use_lstm: false
-  use_obj_pc: false
+  use_obj_pc_encoder: false
+  use_obj_pc_condition: false
 
 training:
   batch_size: 32

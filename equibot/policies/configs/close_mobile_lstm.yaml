@@ -1,0 +1,11 @@
+defaults:
+  - close_mobile_dp
+
+model:
+  use_lstm: true
+  lstm_dim: 4
+
+training:
+  save_interval: 50
+  batch_size: 20
+  loss_every: 10

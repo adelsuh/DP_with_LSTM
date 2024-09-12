@@ -50,8 +50,8 @@ class DPPolicy(nn.Module):
             self.obs_dim = 512 + self.num_eef * self.eef_dim
         else:
             self.obs_dim = hidden_dim + self.num_eef * self.eef_dim
-        if cfg.model.obs_rgb:
-            self.obs_dim += 512
+        # if cfg.model.obs_rgb:
+        #     self.obs_dim += 512
         self.action_dim = self.dof * cfg.env.num_eef
 
         if self.obs_mode.startswith("pc"):
@@ -64,8 +64,8 @@ class DPPolicy(nn.Module):
             self.encoder = replace_bn_with_gn(get_resnet("resnet18"))
         else:
             self.encoder = nn.Identity()
-        if cfg.model.obs_rgb:
-            self.rgb_encoder = replace_bn_with_gn(get_resnet("resnet18"))
+        # if cfg.model.obs_rgb:
+        #     self.rgb_encoder = replace_bn_with_gn(get_resnet("resnet18"))
         global_cond_dim = self.obs_dim*self.obs_horizon
         if cfg.model.use_lstm:
             global_cond_dim += cfg.model.lstm_dim
@@ -82,8 +82,8 @@ class DPPolicy(nn.Module):
             {"encoder": self.encoder, "noise_pred_net": self.noise_pred_net}
         )
 
-        if cfg.model.obs_rgb:
-            self.nets.update({"rgb_encoder": self.rgb_encoder})
+        # if cfg.model.obs_rgb:
+        #     self.nets.update({"rgb_encoder": self.rgb_encoder})
 
         if self.cfg.model.use_lstm:
             self.lstm = nn.LSTM(self.obs_dim, cfg.model.lstm_dim) #Theoretically 1 should be enough, but just in case...
@@ -102,8 +102,8 @@ class DPPolicy(nn.Module):
         if self.cfg.model.use_torch_compile:
             self.encoder_handle = torch.compile(self.encoder)
             self.noise_pred_net_handle = torch.compile(self.noise_pred_net)
-            if self.cfg.model.obs_rgb:
-                self.rgb_encoder_handle = torch.compile(self.rgb_encoder)
+            # if self.cfg.model.obs_rgb:
+            #     self.rgb_encoder_handle = torch.compile(self.rgb_encoder)
             if self.cfg.model.use_lstm:
                 self.lstm_handle = torch.compile(self.lstm)
     
@@ -145,15 +145,15 @@ class DPPolicy(nn.Module):
                 else:
                     z = ema_nets["encoder"](flattened_pc.permute(0, 2, 1))["global"]
                 z = z.reshape(batch_size, self.obs_horizon, -1)
-            if self.cfg.model.obs_rgb :
-                rgb = obs["rgb"]
-                rgb_shape = rgb.shape
-                flattened_rgb = rgb.reshape(
-                    batch_size * self.obs_horizon, *rgb_shape[-3:]
-                )
-                z_rgb = ema_nets["rgb_encoder"](flattened_rgb.permute(0, 3, 1, 2))
-                z_rgb = z_rgb.reshape(batch_size, self.obs_horizon, -1)
-                z = torch.cat([z, z_rgb], dim=-1)
+            # if self.cfg.model.obs_rgb :
+            #     rgb = obs["rgb"]
+            #     rgb_shape = rgb.shape
+            #     flattened_rgb = rgb.reshape(
+            #         batch_size * self.obs_horizon, *rgb_shape[-3:]
+            #     )
+            #     z_rgb = ema_nets["rgb_encoder"](flattened_rgb.permute(0, 3, 1, 2))
+            #     z_rgb = z_rgb.reshape(batch_size, self.obs_horizon, -1)
+            #     z = torch.cat([z, z_rgb], dim=-1)
 
             z = torch.cat([z, state], dim=-1)
             if self.cfg.model.use_obj_pc_condition:

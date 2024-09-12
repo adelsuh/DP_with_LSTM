@@ -1,0 +1,6 @@
+defaults:
+  - close_mobile_dp
+
+model:
+  use_obj_pc_encoder: true
+  obj_path: ./pcd_obj.ply
